@@ -39,61 +39,65 @@ async def notify(request: Request):
     payload = await request.json()
     event_type = payload.get('event_type', 'unknown')
     sender = payload.get('sender', 'unknown')
-    title=payload.get("title",'')
-    description=payload.get("description","")
-    timestamp=payload.get("timestamp")
-    compare_branch=payload.get("compare_branch","unknown")
-    base_branch="main"
+    title = payload.get("title", '')
+    description = payload.get("description", "")
+    timestamp = payload.get("timestamp")
+    compare_branch = payload.get("compare_branch", "unknown")
+    base_branch = "main"
     repo_info = payload.get("repository")
     pr_number = payload.get("pr_number")
 
+    # Handle pull request events
+    action = payload.get("action") if event_type == "pull_request" else None
+    if event_type == "pull_request":
+        if action == 'synchronize':
+            return {"status": "ignored synchronize event"}
+        if action not in ['opened', "reopened", "closed"]:
+            return {"status": f"Ignored PR action {action}"}
+        if action == "closed":
+            return {"status": "ignored closed event to avoid duplicate notification"}
 
-    if event_type=="pull_request":
-        action=payload.get("action")
-        if action=='synchronize':
-            return {"status":"ignored synchronize event"}
-        if action not in ['opened',"reopened","closed"]:
-             return {"status":f"Ignored PR action {action}"}
-        if action =="closed":
-             return {"status":"ignored closed event to avoid duplicate notification"}
-        
+    # Extract repo full name
     if isinstance(repo_info, dict):
         repo = repo_info.get("full_name", "unknown")
     else:
         repo = str(repo_info) if repo_info else "unknown"
 
+    # Ensure PR number
+    if not pr_number and event_type == "pull_request":
+        pr = payload.get("pull_request", {})
+        pr_number = pr.get("number")
 
-    if not pr_number:
-        pr = payload.get("pull_request")
-        if isinstance(pr, dict):
-            pr_number = pr.get("number")
-        if not pr_number:
-            pr_number = payload.get("number") 
-    if pr_number is not None:
-         event_key=(pr_number,action)
-         if event_key in handled_prs:
-              return {"status":f"Ignored duplicate event for PR #{pr_number}"}
-         else:
-              handled_prs.add(event_key)
-
-
+    # Convert timestamp
     if timestamp:
-        timestamp=convert_utc_to_ist(timestamp)
-        timestamp=timestamp.split("+")[0].replace("T"," ").split(".")[0]
+        try:
+            dt = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.UTC)
+            timestamp = dt.astimezone(pytz.timezone('Asia/Kolkata')).strftime("%Y-%m-%d %H:%M:%S IST")
+        except Exception:
+            pass
     else:
-        timestamp=datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S IST")
+        timestamp = datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S IST")
+
+    # Compose Slack message
     message = f"🔔 New GitHub event: {event_type} on repository: {repo}"
-    message+=f"\n- Title: {title}\n- Description: {description}\n- Timestamp: {timestamp}\n- User: {sender}\n- Base Branch: {base_branch}\n- Compare Branch: {compare_branch}"
+    message += f"\n- Title: {title}\n- Description: {description}\n- Timestamp: {timestamp}\n- User: {sender}\n- Base Branch: {base_branch}\n- Compare Branch: {compare_branch}"
     print(message)
-    tool_args={
-        "message":message,
-        "event_type":event_type,
-        "repo":repo,
-        "pr_number":pr_number,
-    }
-    slack_response=send_slack_notification.fn(message=message,event_type=event_type,repo=repo,pr_number=pr_number)
-    print("Slack response",slack_response)
-    return {"status": "notified and send to slack"}
+
+    # Send message to Slack
+    try:
+        slack_response = send_slack_notification(
+            message=message,
+            event_type=event_type,
+            repo=repo,
+            pr_number=pr_number
+        )
+        print("Slack response:", slack_response)
+    except Exception as e:
+        print(f"❌ Failed to send Slack notification: {e}")
+        return {"status": "error", "error": str(e)}
+
+    return {"status": "notified and sent to slack"}
+
 # -------------------------------------------------------------------------------------------------------------------------------
 
 @app.post("/slack/interact")
@@ -120,8 +124,8 @@ async def handler_slack_actions(request: Request):
                     pr_number = int(pr_number)
             except (ValueError, TypeError):
                     return JSONResponse({"error": "Invalid or missing PR number"}, status_code=400)
-            result_text=merge_pull_request.fn(repo=repo,pr_number=pr_number)
-            send_slack_notification.fn(message=result_text,repo=repo,pr_number=pr_number)
+            result_text=merge_pull_request(repo=repo,pr_number=pr_number)
+            send_slack_notification(message=result_text,repo=repo,pr_number=pr_number)
             # return JSONResponse({"text":f"{result_text}"})
 
         elif action_id=='cancel_action':
@@ -129,12 +133,12 @@ async def handler_slack_actions(request: Request):
                     pr_number = int(pr_number)
             except (ValueError, TypeError):
                     return JSONResponse({"error": "Invalid or missing PR number"}, status_code=400)
-            pr_details=get_pull_request_details.fn(repo=repo,pr_number=pr_number)
+            pr_details=get_pull_request_details(repo=repo,pr_number=pr_number)
             if isinstance(pr_details,dict) and pr_details.get("merged"):
                  return JSONResponse({"text":f"PR #{pr_number} in {repo} is already merged. Cancel Skipped."})
             
-            result_text=close_pull_request.fn(repo=repo,pr_number=pr_number)
-            send_slack_notification.fn(message=result_text,repo=repo,pr_number=pr_number)
+            result_text=close_pull_request(repo=repo,pr_number=pr_number)
+            send_slack_notification(message=result_text,repo=repo,pr_number=pr_number)
 
             return JSONResponse({"text":f"{result_text}"})
     except Exception as e:

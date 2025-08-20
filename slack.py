@@ -11,7 +11,7 @@ app=FastAPI()
 SLACK_BOT_TOKEN=os.environ.get("SLACK_API_KEY")
 
 
-@function_tool
+# @function_tool
 def send_slack_notification(message:str,repo,pr_number,event_type:str="unknown")->str:
     """Send a formatted notification to the team slack channel."""
     webhook_url=os.environ.get("SLACK_WEBHOOK_URL")
