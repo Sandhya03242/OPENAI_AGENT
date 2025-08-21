@@ -22,7 +22,7 @@ class GithubSecurityCheckup(BaseModel):
 
 guardrail_agent=Agent(
     name="Github Guardrail Checker",
-    instructions="You are a gtihub guardrail agent.",
+    instructions="You are a github guardrail agent.",
     output_type=GithubSecurityCheckup,
     model="gpt-5-nano"
 )

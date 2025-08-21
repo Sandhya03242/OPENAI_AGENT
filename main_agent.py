@@ -2,7 +2,7 @@ from agents import (Agent, Runner, GuardrailFunctionOutput,
                     InputGuardrailTripwireTriggered, RunContextWrapper,
                     TResponseInputItem, input_guardrail, SQLiteSession)
 from github import github_agent
-# from slack import slack_agent
+from slack import slack_agent
 from pydantic import BaseModel
 import asyncio
 from dotenv import load_dotenv
@@ -38,7 +38,7 @@ async def security_guardrail(
 main_agent=Agent(
     name="Main Agent",
     instructions="Main agent that interact with github and slack agent",
-    handoffs=[github_agent],
+    handoffs=[github_agent,slack_agent],
     model="gpt-5-nano",
     input_guardrails=[security_guardrail]
 
@@ -63,7 +63,7 @@ async def repo_loop(agent:Agent,session:SQLiteSession):
             print("❌ Guardrail tripped unsafe input blocked")
 
 async def main():
-    await Runner.run(main_agent,"Get latest Github event and send to slack",session=session)
+    await Runner.run(main_agent,"Get latest Github event and send to slack",session=session, max_turns=50)
     await repo_loop(main_agent,session)
 
 if __name__=="__main__":

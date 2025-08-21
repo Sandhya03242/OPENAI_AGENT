@@ -1,18 +1,45 @@
-from dotenv import load_dotenv
+import asyncio
+from agents import (Agent,Runner,
+                    GuardrailFunctionOutput,
+                    RunContextWrapper,TResponseInputItem,input_guardrail)
+from agents.tool import function_tool
+from typing import Optional
+from pydantic import BaseModel
+from pathlib import Path
+import json
 import os
 import requests
-from fastapi import FastAPI
-from agents import Agent, function_tool
-import json
 from dotenv import load_dotenv
 load_dotenv()
 
-app=FastAPI()
 SLACK_BOT_TOKEN=os.environ.get("SLACK_API_KEY")
+SLACK_WEBHOOK_URL=os.environ.get("SLACK_WEBHOOK_URL")
+SLACK_CHANNEL_ID=os.environ.get("SLACK_Channel_ID")
+# --------------------------Guardrail-------------------------------------------------
+
+class SlackSecurityCheckup(BaseModel):
+    is_unsafe:bool
+    reasoning:str
 
 
-# @function_tool
-def send_slack_notification(message:str,repo,pr_number,event_type:str="unknown")->str:
+guardrail_agent=Agent(
+    name="Slack Guardrail Checker",
+    instructions="You are a slack guardrail agent.",
+    output_type=SlackSecurityCheckup,
+    model="gpt-5-nano"
+)
+
+@input_guardrail
+async def slack_guardrail(
+    ctx:RunContextWrapper[None],
+    agent:Agent,
+    input:str|list[TResponseInputItem])->GuardrailFunctionOutput:
+    result= await Runner.run(guardrail_agent,input,context=ctx.context)
+    return GuardrailFunctionOutput(output_info=result.final_output, tripwire_triggered=result.final_output.is_unsafe)
+
+
+@function_tool
+def send_slack_notification(message:str,repo:str,channel:str,pr_number:int=None,event_type:str="unknown")->str:
     """Send a formatted notification to the team slack channel."""
     webhook_url=os.environ.get("SLACK_WEBHOOK_URL")
     if not webhook_url:
@@ -45,6 +72,7 @@ def send_slack_notification(message:str,repo,pr_number,event_type:str="unknown")
         )
 
     payload={
+            "channel":channel if channel else SLACK_CHANNEL_ID,
             "blocks":blocks,
             "text":message,
             "mrkdwn":True
@@ -67,5 +95,6 @@ slack_agent=Agent(
     name="slack agent",
     instructions="slack agent that get slack notification",
     tools=[send_slack_notification],
-    model="gpt-5-nano"
+    model="gpt-5-nano",
+    input_guardrails=[slack_guardrail]
 )
