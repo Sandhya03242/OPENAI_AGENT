@@ -53,7 +53,9 @@ class Event(BaseModel):
 class EventList(BaseModel):
     events:List[Event]
 
-def _get_recent_events() -> EventList:
+
+@function_tool
+def get_recent_events() -> EventList:
     if not EVENTS_FILE.exists():
         return EventList(events=[])
     with open(EVENTS_FILE) as f:
@@ -79,10 +81,8 @@ def _get_recent_events() -> EventList:
     return EventList(events=events)
 
 
-get_recent_events = function_tool(_get_recent_events)
-
-
-def _summarize_latest_event(input: EventList) -> str:
+@function_tool
+def summarize_latest_event(input: EventList) -> str:
     events = input.events
     if not events:
         return "No GitHub events received yet."
@@ -97,7 +97,6 @@ def _summarize_latest_event(input: EventList) -> str:
         f"- Base Branch: {latest.base_branch or 'N/A'}\n"
         f"- Compare Branch: {latest.compare_branch or 'N/A'}"
     )
-summarize_latest_event = function_tool(_summarize_latest_event)
 
 # ---------------- gtihub Agent------------------------------------------------
 

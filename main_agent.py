@@ -1,13 +1,12 @@
 from agents import (Agent, Runner, GuardrailFunctionOutput, 
                     InputGuardrailTripwireTriggered, RunContextWrapper,
                     TResponseInputItem, input_guardrail, SQLiteSession)
-from github import github_agent, get_recent_events, summarize_latest_event
+from github import github_agent
 from slack import slack_agent
 from pydantic import BaseModel
 import asyncio
 from aiohttp import web, ClientSession
 import json
-from github import _get_recent_events, _summarize_latest_event
 from datetime import datetime
 import pytz
 import os
