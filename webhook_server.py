@@ -10,11 +10,14 @@ EVENTS_FILE=Path(__file__).parent / "github_events.json"
 async def notify_manager(event):
     async with ClientSession() as session:
         try:
-            async with session.post("http://localhost:8001/notify",json=event, timeout=5) as rep:
+            async with session.post("http://localhost:8001/notify",json=event, timeout=30) as rep:
+                print("sent event to manager response status: ",rep.status)
                 if rep.status !=200:
                     print(f"Notify failed with status {rep.status}")
         except Exception as notify_error:
-            print(F"Failed to notify manager agent:{notify_error}")
+            import traceback
+            print("❌ Failed to notify manager agent:", notify_error)
+            traceback.print_exc()
 
 
 
