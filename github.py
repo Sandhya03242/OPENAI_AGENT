@@ -89,7 +89,7 @@ def _summarize_latest_event(input: EventList) -> str:
     
     latest = events[-1]
     return (
-        f":bell: New GitHub event: {latest.type or 'N/A'} on repository: {latest.repository or 'N/A'}\n"
+        f"🔔 New GitHub event: {latest.type or 'N/A'} on repository: {latest.repository or 'N/A'}\n"
         f"- Title: {latest.title or 'N/A'}\n"
         f"- Description: {latest.description or 'N/A'}\n"
         f"- Timestamp: {latest.timestamp or 'N/A'}\n"

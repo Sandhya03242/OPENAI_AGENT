@@ -10,7 +10,7 @@ EVENTS_FILE=Path(__file__).parent / "github_events.json"
 async def notify_manager(event):
     async with ClientSession() as session:
         try:
-            async with session.post("http://localhost:8001/notify",json=event, timeout=30) as rep:
+            async with session.post("http://localhost:8001/notify",json=event, timeout=50) as rep:
                 print("sent event to manager response status: ",rep.status)
                 if rep.status !=200:
                     print(f"Notify failed with status {rep.status}")
@@ -51,9 +51,9 @@ async def handle_webhook(request):
         elif event_type == "create" or event_type == "delete":
             branch_name = data.get("ref", None)
 
-        if branch_name and branch_name.lower() != "main":
-            print(f"Skipping event for non-main branch: {branch_name}")
-            return web.json_response({"status": "ignored"})
+        # if branch_name and branch_name.lower() != "main":
+        #     print(f"Skipping event for non-main branch: {branch_name}")
+        #     return web.json_response({"status": "ignored"})
 
         if event_type == 'pull_request':
             action=data.get("action")
@@ -126,7 +126,13 @@ async def handle_webhook(request):
         events=[]
         if EVENTS_FILE.exists():
             with open(EVENTS_FILE) as f:
-                events=json.load(f)
+                loaded=json.load(f)
+                if isinstance(loaded,list):
+                    events=loaded
+                elif isinstance(loaded,dict) and "events" in loaded:
+                    events=loaded['events']
+                else:
+                    events=[]
         events.append(event)
         events=events[-100:]
         with open(EVENTS_FILE,"w") as f:

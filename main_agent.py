@@ -8,6 +8,9 @@ import asyncio
 from aiohttp import web, ClientSession
 import json
 from github import _get_recent_events, _summarize_latest_event
+from datetime import datetime
+import pytz
+import os
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -59,36 +62,54 @@ session=SQLiteSession("conversation_123")
 
 async def notify(request):
     data = await request.json()
-    event_type = request.headers.get("X-GitHub-Event", "unknown")
-
-    print(f"📢 Received GitHub event: {event_type}")
-
-    event = {
-        "event_type": event_type,
-        "payload": data
+    event_type = data.get("event_type","unknown")
+    print(f"Received GitHub event: {event_type}")
+    ist_now=datetime.now(pytz.timezone("Asia/Kolkata")).isoformat()
+    sender=data.get("sender")
+    if isinstance(sender,dict):
+        sender_login=sender.get("login")
+    else:
+        sender_login=str(sender) if sender else None
+    event={
+        "event_type":event_type,
+        "timestamp":ist_now,
+        "action":data.get("action"),
+        "repository":data.get("repository",{}),
+        "pr_number":data.get("pull_request",{}).get("number"),
+        "title":data.get("pull_request",{}).get("title"),
+        "description":data.get("pull_request",{}).get("body"),
+        "sender":sender_login,
+        "base_branch":data.get("repository",{}).get("default_branch"),
+        "compare_branch":data.get("ref")
     }
-
-    import os
-    events = []
+    events=[]
     if os.path.exists("github_events.json"):
         with open("github_events.json") as f:
             try:
-                events = json.load(f)
+                events=json.load(f)
             except Exception:
-                events = []
+                events=[]
     events.append(event)
-    events = events[-100:] 
-    with open("github_events.json", "w") as f:
-        json.dump(events, f, indent=2)
-    # ---------------------------------------
+    events=events[-100:]
+    with open("github_events.json","w") as f:
+        json.dump(events,f,indent=2)
+    asyncio.create_task(handle_event(event_type,data))
+    return web.json_response({"status":"ok"})
 
-    asyncio.create_task(handle_event(event_type, data))
-    return web.json_response({"status": "ok"})
 
 
 
 async def handle_event(event_type, data):
-    summary = f"New GitHub event: {event_type}\n{json.dumps(data, indent=2)}"
+    summary = (
+        f"🔔 New GitHub event: {event_type} on repository: {data.get('repository',{}).get('full_name')}\n"
+        f"- Title: {data.get('title')}\n"
+        f"- Description: {data.get('description')}\n"
+        f"- Timestamp: {data.get('timestamp')}\n"
+        f"- User: {data.get('sender')}\n"
+        f"- Base Branch: {data.get('base_branch')}\n"
+        f"- Compare Branch: {data.get('compare_branch')}"
+    )
+    print(summary)
 
     try:
         result = await Runner.run(main_agent, summary, session=session)
