@@ -125,9 +125,12 @@ async def handle_event(event_type, data):
 
 
 # -----------------------------------------------------------------------------
+
+async def ainput(prompt:str="")->str:
+    return await asyncio.to_thread(input, prompt)
 async def repo_loop(agent:Agent,session:SQLiteSession):
     while True:
-        user_input=input("You:")
+        user_input=await ainput("You:")
         if user_input.lower().strip() in {"exit","quit"}:
             print("👋 Exiting Loop")
             break
@@ -149,8 +152,8 @@ async def start_web_server():
 
 async def main():
     await start_web_server()
-    await Runner.run(main_agent,"Get latest Github event and send to slack",session=session, max_turns=50)
-    await repo_loop(main_agent,session)
+    # await Runner.run(main_agent,"Get latest Github event and send to slack",session=session,max_turns=50)
+    await asyncio.gather(repo_loop(main_agent,session))
 
 if __name__=="__main__":
     asyncio.run(main())
