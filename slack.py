@@ -46,30 +46,30 @@ def send_slack_notification(message:str,repo:str,channel:str,pr_number:int=None,
         return "Error: SLACK_WEBHOOK_URL environment  variable not set"
     blocks=[
         {"type":"section","text":{"type":"mrkdwn","text":message}}]
-    if event_type and event_type.lower()=="pull_request" and  pr_number and str(pr_number).isdigit():
+    # if event_type and event_type.lower()=="pull_request" and  pr_number and str(pr_number).isdigit():
         
-        value_payload = json.dumps({"repo": repo, "pr_number": pr_number})
+    #     value_payload = json.dumps({"repo": repo, "pr_number": pr_number})
 
-        blocks.append({
-            "type":"actions",
-            "elements":[
-                {
-                    "type":"button",
-                    "text":{"type":"plain_text","text":"✅ Merge"},
-                    "style":"primary",
-                    "value":value_payload,
-                    "action_id":"merge_action"
-                },
-                {
-                    "type":"button",
-                    "text":{"type":"plain_text","text":"❌ Cancel"},
-                    "style":"danger",
-                    "value":value_payload,
-                    "action_id":"cancel_action"
-                }
-            ]
-        }
-        )
+        # blocks.append({
+        #     "type":"actions",
+        #     "elements":[
+        #         {
+        #             "type":"button",
+        #             "text":{"type":"plain_text","text":"✅ Merge"},
+        #             "style":"primary",
+        #             "value":value_payload,
+        #             "action_id":"merge_action"
+        #         },
+        #         {
+        #             "type":"button",
+        #             "text":{"type":"plain_text","text":"❌ Cancel"},
+        #             "style":"danger",
+        #             "value":value_payload,
+        #             "action_id":"cancel_action"
+        #         }
+        #     ]
+        # }
+        # )
 
     payload={
             "channel":channel if channel else SLACK_CHANNEL_ID,

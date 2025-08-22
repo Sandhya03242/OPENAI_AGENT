@@ -112,15 +112,10 @@ async def handle_event(event_type, data):
     print(summary)
 
     try:
-        result = await Runner.run(main_agent, summary, session=session)
+        result = await Runner.run(slack_agent, summary, session=session)
         print("🤖 Assistant: ", result.final_output)
     except InputGuardrailTripwireTriggered:
         print("❌ Guardrail blocked unsafe event")
-
-
-    
-
-
 
 
 
