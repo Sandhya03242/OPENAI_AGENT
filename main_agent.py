@@ -5,7 +5,7 @@ from github import github_agent
 from slack import slack_agent
 from pydantic import BaseModel
 import asyncio
-from aiohttp import web, ClientSession
+from aiohttp import web
 import json
 from datetime import datetime
 import pytz
@@ -100,7 +100,7 @@ async def notify(request):
 
 async def handle_event(event_type, data):
     summary = (
-        f"🔔 New GitHub event: {event_type} on repository: {data.get('repository',{}).get('full_name')}\n"
+        f"🔔 New GitHub event: {event_type}({data.get('action')}) on repository: {data.get('repository',{}).get('full_name')}\n"
         f"- Title: {data.get('title')}\n"
         f"- Description: {data.get('description')}\n"
         f"- Timestamp: {data.get('timestamp')}\n"

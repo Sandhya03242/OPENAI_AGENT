@@ -93,7 +93,7 @@ def send_slack_notification(message:str,repo:str,channel:str,pr_number:int=None,
 
 slack_agent=Agent(
     name="slack agent",
-    instructions="slack agent that get slack notification",
+    instructions="You are a slack forwarder. whenever you receive input alway post it directly to slack channel. do not ask the user for confirmation. do not request additional details. only post the exact input text you are given.",
     tools=[send_slack_notification],
     model="gpt-5-nano",
     input_guardrails=[slack_guardrail]
