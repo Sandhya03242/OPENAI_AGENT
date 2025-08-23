@@ -24,7 +24,7 @@ guardrail_agent=Agent(
     name="Github Guardrail Checker",
     instructions="You are a github guardrail agent.",
     output_type=GithubSecurityCheckup,
-    model="gpt-5-nano"
+    model="gpt-5-mini"
 )
 
 @input_guardrail
@@ -80,6 +80,26 @@ def get_recent_events() -> EventList:
 
     return EventList(events=events)
 
+@function_tool
+def get_repository_status()->str:
+    if not EVENTS_FILE.exists():
+        return "No events recorded yet for this repository.."
+    with open(EVENTS_FILE) as f:
+        events=json.load(f)
+    if not events:
+        return "No events recorded yet for this repository."
+    pr_events=[e for e in events if e.get("event_type")=="pull_request"]
+    push_events=[e for e in events if e.get("event_type")=="push"]
+    issue_events=[e for e in events if e.get("event_type")=="issues"]
+    summary=[]
+    summary.append(f"Repository: {events[-1].get('repository',{}).get('full_name','unknown')}")
+    summary.append(f"Open PRs: {len(pr_events)}")
+    summary.append(f"Pushes: {len(push_events)}")
+    summary.append(f"Issues: {len(issue_events)}")
+    summary.append(f"Latest activity: {events[-1].get('event_type')}({events[-1].get('action')}) at {events[-1].get('timestamp')}")
+    return "\n".join(summary)
+
+
 
 @function_tool
 def summarize_latest_event(input: EventList) -> str:
@@ -105,7 +125,7 @@ github_agent=Agent(
     instructions="You are github agent to response to github events and actions",
     model="gpt-5-nano",
     input_guardrails=[security_guardrail],
-    tools=[get_recent_events,summarize_latest_event]
+    tools=[get_recent_events,summarize_latest_event,get_repository_status]
 )
 
 

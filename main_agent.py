@@ -20,12 +20,26 @@ class SecurityCheckup(BaseModel):
     reasoning:str
 
 
+# related_guardrail_agent=Agent(
+#     name="Related Guardrail Checker",
+#     instructions="Detect if input is Github/Slack related. Mark unrelated questions as unsafe.",
+#     output_type=SecurityCheckup,
+#     model="gpt-5-mini"
+# )
+
+
 guardrail_agent=Agent(
-    name="Guardrail Checker",
-    instructions="You are a guardrail agent.",
+    name="Unrelated Guardrail Checker",
+    instructions="You are a full guardrail agent for unrelated questions.",
     output_type=SecurityCheckup,
     model="gpt-5-nano"
 )
+
+
+async def is_github_related(query:str)->bool:
+    """Detect if the user input is related to GitHub."""
+    github_keywords=["github","repository","repo","pull_request","event","pr","push","issue","create","delete"]
+    return any(word.lower() in query.lower() for word in github_keywords)
 
 
 @input_guardrail
@@ -33,6 +47,21 @@ async def security_guardrail(
     ctx:RunContextWrapper[None],
     agent:Agent,
     input:str|list[TResponseInputItem])->GuardrailFunctionOutput:
+    if isinstance(input,str):
+        user_input=input
+    elif isinstance(input,list):
+        parts=[]
+        for i in input:
+            if isinstance(i,dict):
+                parts.append(i.get("text",""))
+            else:
+                parts.append(getattr(i,"text",str(i)))
+        user_input=" ".join(parts)
+    else:
+        user_input=str(input)
+
+    github_related=await is_github_related(user_input)
+    # selected_agent= related_guardrail_agent if github_related else unrelated_guardrail_agent
     result= await Runner.run(guardrail_agent,input,context=ctx.context)
     return GuardrailFunctionOutput(output_info=result.final_output, tripwire_triggered=result.final_output.is_unsafe)
 
@@ -40,12 +69,17 @@ async def security_guardrail(
 
 # -------------------- Main Agent---------------------------------------- 
 
+
+
 main_agent=Agent(
     name="Main Agent",
-    instructions="You are the orchestrator agent. "
+    instructions=("You are the orchestrator agent. "
         "Whenever a GitHub event summary is received, "
         "you must automatically send it to Slack (using slack_agent) without asking the user. "
-        "Always forward the event summary exactly as received.",
+        "Always forward the event summary exactly as received."
+        "if the user ask about Github repository details, status or recent events,"
+        "you must call the github_agent tools"
+        "instaed of replying directly."),
     handoffs=[github_agent,slack_agent],
     model="gpt-5-nano",
     input_guardrails=[security_guardrail]
@@ -108,13 +142,14 @@ async def handle_event(event_type, data):
         f"- Base Branch: {data.get('base_branch')}\n"
         f"- Compare Branch: {data.get('compare_branch')}"
     )
-    print(summary)
 
     try:
         result = await Runner.run(slack_agent, summary, session=session)
         print("🤖 Assistant: ", result.final_output)
     except InputGuardrailTripwireTriggered:
         print("❌ Guardrail blocked unsafe event")
+
+
 
 
 
@@ -128,12 +163,23 @@ async def repo_loop(agent:Agent,session:SQLiteSession):
         if user_input.lower().strip() in {"exit","quit"}:
             print("👋 Exiting Loop")
             break
+        github_related=await is_github_related(user_input)
+        model="gpt-5-mini" if github_related else "gpt-5-nano"
+        print(f"user_input: {user_input} | github_related: {github_related} | selected_model: {model}")
+        dynamic_agent=Agent(
+            name="Main Agent",
+            instructions=main_agent.instructions,
+            handoffs=main_agent.handoffs,
+            model=model,
+            input_guardrails=main_agent.input_guardrails
+        )
+
         try:
-            result=await Runner.run(agent,user_input,session=session)
-            print("🤖 Assistant: ", result.final_output)
+            result=await Runner.run(dynamic_agent,user_input,session=session)
+            print(f"🤖 Assistant({dynamic_agent.model}): ", result.final_output)
 
         except InputGuardrailTripwireTriggered:
-            print("❌ Guardrail tripped unsafe input blocked")
+            print(f"❌({agent.model}) Guardrail tripped unsafe input blocked")
 
 async def start_web_server():
     app=web.Application()
@@ -146,7 +192,6 @@ async def start_web_server():
 
 async def main():
     await start_web_server()
-    # await Runner.run(main_agent,"Get latest Github event and send to slack",session=session,max_turns=50)
     await asyncio.gather(repo_loop(main_agent,session))
 
 if __name__=="__main__":
