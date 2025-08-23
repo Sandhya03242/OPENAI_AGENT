@@ -79,7 +79,9 @@ main_agent=Agent(
         "Always forward the event summary exactly as received."
         "if the user ask about Github repository details, status or recent events,"
         "you must call the github_agent tools"
-        "instaed of replying directly."),
+        "instead of replying directly."
+        "For any input that is unrelated to Github or Slack , do not attempt to answer it directly." 
+        "Instead ,respond in a natural and varied way that conveys you don't know"),
     handoffs=[github_agent,slack_agent],
     model="gpt-5-nano",
     input_guardrails=[security_guardrail]
@@ -177,6 +179,14 @@ async def repo_loop(agent:Agent,session:SQLiteSession):
         try:
             result=await Runner.run(dynamic_agent,user_input,session=session)
             print(f"🤖 Assistant({dynamic_agent.model}): ", result.final_output)
+            if result.raw_responses:
+                raw=result.raw_responses[0].usage
+                # print(raw)
+                input_token=raw.input_tokens
+                output_token=raw.output_tokens
+                print(f"Token Used:\n- Input Token: {input_token}\n- Output Token: {output_token}")
+                    
+
 
         except InputGuardrailTripwireTriggered:
             print(f"❌({agent.model}) Guardrail tripped unsafe input blocked")
