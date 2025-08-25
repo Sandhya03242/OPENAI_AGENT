@@ -1,17 +1,25 @@
 from agents import (Agent, Runner, GuardrailFunctionOutput, 
                     InputGuardrailTripwireTriggered, RunContextWrapper,
-                    TResponseInputItem, input_guardrail, SQLiteSession)
+                    TResponseInputItem, input_guardrail, SQLiteSession, trace,set_trace_processors)
 from github import github_agent
 from slack import slack_agent
 from pydantic import BaseModel
 import asyncio
 from aiohttp import web
 import json
+import weave
+from weave.integrations.openai_agents.openai_agents import WeaveTracingProcessor
 from datetime import datetime
 import pytz
 import os
+from openai.types.responses import ResponseTextDeltaEvent
+
 from dotenv import load_dotenv
 load_dotenv()
+
+weave.init("openai-agents")
+set_trace_processors([WeaveTracingProcessor()])
+
 
 # --------------------Guardrail-------------------------------
 
@@ -144,7 +152,7 @@ async def handle_event(event_type, data):
         f"- Base Branch: {data.get('base_branch')}\n"
         f"- Compare Branch: {data.get('compare_branch')}"
     )
-
+    print(summary)
     try:
         result = await Runner.run(slack_agent, summary, session=session)
         print("🤖 Assistant: ", result.final_output)
@@ -165,31 +173,34 @@ async def repo_loop(agent:Agent,session:SQLiteSession):
         if user_input.lower().strip() in {"exit","quit"}:
             print("👋 Exiting Loop")
             break
-        github_related=await is_github_related(user_input)
-        model="gpt-5-mini" if github_related else "gpt-5-nano"
-        print(f"user_input: {user_input} | github_related: {github_related} | selected_model: {model}")
-        dynamic_agent=Agent(
-            name="Main Agent",
-            instructions=main_agent.instructions,
-            handoffs=main_agent.handoffs,
-            model=model,
-            input_guardrails=main_agent.input_guardrails
-        )
+        with trace("Main Agent Workflow"):
+            github_related=await is_github_related(user_input)
+            model="gpt-5-mini" if github_related else "gpt-5-nano"
+            print(f"user_input: {user_input} | github_related: {github_related} | selected_model: {model}")
+            dynamic_agent=Agent(
+                name="Main Agent",
+                instructions=main_agent.instructions,
+                handoffs=main_agent.handoffs,
+                model=model,
+                input_guardrails=main_agent.input_guardrails
+            )
 
-        try:
-            result=await Runner.run(dynamic_agent,user_input,session=session)
-            print(f"🤖 Assistant({dynamic_agent.model}): ", result.final_output)
-            if result.raw_responses:
-                raw=result.raw_responses[0].usage
-                # print(raw)
-                input_token=raw.input_tokens
-                output_token=raw.output_tokens
+            try:
+                result=Runner.run_streamed(dynamic_agent,user_input,session=session)
+
+                print(f"🤖 Assistant({dynamic_agent.model}): ", end="",flush=True)
+                async for event in result.stream_events():
+                    if event.type=="raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+                        print(event.data.delta,end="",flush=True)
+                        await asyncio.sleep(0.03)
+                print()
+                usage=result.context_wrapper.usage
+                input_token=usage.input_tokens
+                output_token=usage.output_tokens
                 print(f"Token Used:\n- Input Token: {input_token}\n- Output Token: {output_token}")
-                    
 
-
-        except InputGuardrailTripwireTriggered:
-            print(f"❌({agent.model}) Guardrail tripped unsafe input blocked")
+            except InputGuardrailTripwireTriggered:
+                print(f"❌({agent.model}) Guardrail tripped unsafe input blocked")
 
 async def start_web_server():
     app=web.Application()
